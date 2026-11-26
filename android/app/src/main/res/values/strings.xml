@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Typewriter</string>
+    <!-- The name shown in Settings > Keyboard and in the keyboard picker. -->
+    <string name="ime_name">Typewriter</string>
+</resources>
