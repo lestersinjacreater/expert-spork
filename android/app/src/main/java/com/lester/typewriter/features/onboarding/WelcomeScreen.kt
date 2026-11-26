@@ -147,9 +147,14 @@ private fun TryIt() {
     Surface(color = Card, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Try it", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            // The search result replaces the hint, above the boxes: below them the keyboard would hide it.
             Text(
-                "Enter moves to the next box. In the last box it searches.",
-                color = Muted,
+                if (searched.isEmpty()) {
+                    "Enter moves to the next box. In the last box it searches."
+                } else {
+                    "Searched for: $searched"
+                },
+                color = if (searched.isEmpty()) Muted else Done,
                 fontSize = 14.sp,
             )
             OutlinedTextField(
@@ -183,7 +188,6 @@ private fun TryIt() {
                 keyboardActions = KeyboardActions(onSearch = { searched = search }),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (searched.isNotEmpty()) Text("Searched for: $searched", color = Ink)
         }
     }
 }
