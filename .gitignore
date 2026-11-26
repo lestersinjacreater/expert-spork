@@ -1,0 +1,24 @@
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/gradle.log
+*.iml
+.idea/
+.kotlin/
+captures/
+
+# Virtual phone output
+virtual-phone-out/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets and OS files (the debug.keystore is committed on purpose; a Play upload key never is)
+.env
+.env.*
+upload-keystore.jks
+*.p12
+.DS_Store
