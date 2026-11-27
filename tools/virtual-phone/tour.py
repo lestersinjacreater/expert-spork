@@ -47,9 +47,9 @@ class Tour:
         self.check("The phone switches to the Typewriter keyboard", current == IME, current)
 
         p.open_app()
+        seen = p.find_soon("Typewriter is your keyboard")
         p.screenshot("welcome")
-        self.check("The welcome screen sees the keyboard switched on and picked",
-                   p.find("Typewriter is your keyboard") is not None)
+        self.check("The welcome screen sees the keyboard switched on and picked", seen is not None)
 
         boxes = p.text_boxes()
         if not self.check("The welcome screen has three boxes to try", len(boxes) == 3,
@@ -93,7 +93,7 @@ class Tour:
         # 5. ...and "Search" in the last box.
         p.type_keys(keys, ["enter"] + list("ink") + ["enter"])
         self.check("Enter in the search box runs the search",
-                   p.find("Searched for: ink") is not None)
+                   p.find_soon("Searched for: ink", seconds=8) is not None)
         p.screenshot("searched")
 
         # 6. Holding delete keeps deleting.

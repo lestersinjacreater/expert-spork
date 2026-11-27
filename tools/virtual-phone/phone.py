@@ -88,11 +88,29 @@ class Phone:
         """Wait for the emulator to finish booting, then wake and unlock it."""
         self.adb("wait-for-device", timeout=300)
         self.wait_for(lambda: self.shell("getprop sys.boot_completed").strip() == "1", 300, 3)
+        # A freshly booted emulator on a busy CI machine often shows "Pixel Launcher isn't
+        # responding". Hide such dialogs, and give the system a moment to settle.
+        self.shell("settings put global hide_error_dialogs 1")
         for scale in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
             self.shell(f"settings put global {scale} 0")
         self.shell("input keyevent KEYCODE_WAKEUP")
         self.shell("wm dismiss-keyguard")
-        time.sleep(2)
+        time.sleep(10)
+        self.dismiss_system_dialogs()
+
+    def dismiss_system_dialogs(self) -> bool:
+        """Tap "Wait" on any "... isn't responding" dialog. True if one was dismissed."""
+        nodes = self.nodes()
+        if not any("isn't responding" in n["text"] for n in nodes):
+            return False
+        for n in nodes:
+            if n["text"] == "Wait":
+                self.tap(n["x"], n["y"])
+                time.sleep(1.5)
+                return True
+        self.shell("input keyevent KEYCODE_BACK")
+        time.sleep(1.5)
+        return True
 
     def install(self, apk: str) -> tuple[bool, str]:
         self.adb("uninstall", PKG)
@@ -108,6 +126,7 @@ class Phone:
     def open_app(self) -> None:
         self.shell(f"am start -W -n {ACTIVITY}", timeout=90)
         time.sleep(3)
+        self.dismiss_system_dialogs()
 
     def has_permission(self, permission: str) -> bool:
         return permission in self.shell(f"dumpsys package {PKG}")
@@ -130,6 +149,19 @@ class Phone:
             if words.lower() in (n["text"] + " " + n["desc"]).lower():
                 return n
         return None
+
+    def find_soon(self, words: str, seconds: float = 20) -> dict | None:
+        """Like find, but keeps looking for a while (and clears system dialogs in the way)."""
+        found: dict | None = None
+
+        def look() -> bool:
+            nonlocal found
+            self.dismiss_system_dialogs()
+            found = self.find(words)
+            return found is not None
+
+        self.wait_for(look, seconds, 2.0)
+        return found
 
     def text_boxes(self) -> list[dict]:
         """The app's text boxes, top to bottom."""
