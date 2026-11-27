@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Registers the keyboard with Android. The gear icon next to "Typewriter" in
+     Settings > Keyboard opens the welcome screen. -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.lester.typewriter.features.onboarding.MainActivity" />

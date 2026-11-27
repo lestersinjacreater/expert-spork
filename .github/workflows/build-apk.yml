@@ -1,0 +1,88 @@
+name: Build APK
+
+# Builds and tests the keyboard on every push.
+# On the default branch (or when run by hand) it also publishes to the "latest-build" pre-release:
+#   typewriter.apk        the SHRUNK build (R8 removes unused code and resources): small and quick to download.
+#   typewriter-debug.apk  the full debug build, a fallback if the shrunk one misbehaves.
+# Both are signed with the same committed key, so either installs over the other.
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create the latest-build release
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Caches Gradle downloads between runs. The Gradle version comes from the committed wrapper.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests, debug APK and shrunk APK
+        working-directory: android
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest assembleDebug assembleRelease --stacktrace 2>&1 | tee gradle.log
+
+      # Turns compile, test and lint errors into annotations on the check, so they can be read without the full log.
+      - name: Show the errors on failure
+        if: failure()
+        working-directory: android
+        run: |
+          grep -E "^e: |FAILED|error:|Error:|Exception|expected:<" gradle.log | grep -v "^\s*at " | head -25 |
+            while IFS= read -r line; do echo "::error::${line:0:900}"; done
+
+      - name: No internet permission (CLAUDE.md, rule 1)
+        run: |
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT2" dump permissions android/app/build/outputs/apk/release/app-release.apk | tee permissions.txt
+          if grep -q "android.permission.INTERNET" permissions.txt; then
+            echo "::error::The app asks for the INTERNET permission. A library probably added it: check the merged manifest."
+            exit 1
+          fi
+
+      - name: Check APK sizes (debug under 15 MB; shrunk build budget 4 MB)
+        run: |
+          debug=$(stat -c%s android/app/build/outputs/apk/debug/app-debug.apk)
+          shrunk=$(stat -c%s android/app/build/outputs/apk/release/app-release.apk)
+          echo "Debug APK:  $((debug / 1024)) KB"
+          echo "Shrunk APK: $((shrunk / 1024)) KB"
+          echo "### APK sizes" >> "$GITHUB_STEP_SUMMARY"
+          echo "Debug: $((debug / 1024)) KB · Shrunk: $((shrunk / 1024)) KB (budget 4096 KB)" >> "$GITHUB_STEP_SUMMARY"
+          test "$debug" -lt $((15 * 1024 * 1024))
+          if [ "$shrunk" -ge $((4 * 1024 * 1024)) ]; then echo "::warning::Shrunk APK is over the 4 MB budget"; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: typewriter-apks
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish to the latest-build pre-release
+        # Publish from the repository's DEFAULT branch, whatever it is called, or when run by hand.
+        if: github.ref_name == github.event.repository.default_branch || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk typewriter.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk typewriter-debug.apk
+          gh release delete latest-build --cleanup-tag --yes || true
+          gh release create latest-build typewriter.apk typewriter-debug.apk \
+            --prerelease \
+            --title "Latest build #$GITHUB_RUN_NUMBER (${GITHUB_SHA::7})" \
+            --target "$GITHUB_SHA" \
+            --notes "Build #$GITHUB_RUN_NUMBER of commit $GITHUB_SHA on $GITHUB_REF_NAME. The welcome screen shows the same number (Version 0.1.$GITHUB_RUN_NUMBER). typewriter.apk is the small shrunk build; typewriter-debug.apk is the full debug build (same signature, either installs over the other)."
